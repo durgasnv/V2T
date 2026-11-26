@@ -1,0 +1,11 @@
+{
+  "name": "local-dictation-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:browser": "node tests/browser_e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.56.1"
+  }
+}
