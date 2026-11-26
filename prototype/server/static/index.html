@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local Dictation</title>
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #18181b; --muted: #71717a; --line: #e4e4e7;
+    --accent: #2563eb; --rec: #dc2626; --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f0f11; --card: #18181b; --text: #f4f4f5; --muted: #a1a1aa; --line: #27272a;
+            --accent: #60a5fa; --rec: #f87171; --ok: #4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  kbd { font: 12px ui-monospace, monospace; padding: 2px 6px; border: 1px solid var(--line);
+        border-bottom-width: 2px; border-radius: 5px; background: var(--card); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .editor { position: relative; }
+  textarea { width: 100%; min-height: 180px; resize: vertical; border: 0; outline: 0; padding: 0 56px 0 0;
+             background: transparent; color: inherit; font: inherit; font-size: 16px; }
+  #mic { position: absolute; right: 12px; top: 12px; width: 40px; height: 40px; border-radius: 50%;
+         border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer;
+         display: grid; place-items: center; }
+  #mic.rec { background: var(--rec); border-color: var(--rec); color: #fff; }
+  #mic svg { width: 18px; height: 18px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+         margin: 14px 2px 28px; color: var(--muted); font-size: 14px; }
+  label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--text); }
+  input[type="text"], select { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--line);
+                               border-radius: 6px; background: var(--card); color: var(--text); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .steps { display: grid; gap: 10px; }
+  .step { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: start; }
+  .dot { width: 10px; height: 10px; margin: 6px; border-radius: 50%; background: var(--line); }
+  .step.active .dot { background: var(--accent); animation: pulse 1s infinite; }
+  .step.done .dot { background: var(--ok); }
+  .step.error .dot { background: var(--rec); }
+  .name { font-weight: 600; font-size: 14px; }
+  .val { color: var(--muted); font-size: 14px; white-space: pre-wrap; word-break: break-word; min-height: 1.5em; }
+  .time { font: 12px ui-monospace, monospace; color: var(--muted); padding-top: 2px; }
+  #status.err { color: var(--rec); }
+  @keyframes pulse { 50% { opacity: .35; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Local Dictation</h1>
+  <p class="sub">Voice typing that runs entirely on this computer. Hold <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Space</kbd>,
+    speak, then release. Press <kbd>Esc</kbd> to cancel.</p>
+
+  <div class="card editor">
+    <textarea id="box" placeholder="Click here, then hold Ctrl + Shift + Space and talk…" autofocus></textarea>
+    <button id="mic" title="Click to start or stop dictating" aria-label="Dictate">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+  </div>
+
+  <div class="row">
+    <label><input type="checkbox" id="cleanup" checked> Clean up with AI (removes “um”s, fixes punctuation)</label>
+    <span id="status">Ready</span>
+  </div>
+
+  <div class="row">
+    <label>Custom words <input id="dict" type="text" size="22" placeholder="Kubernetes, Durga"></label>
+    <label>Style <select id="style">
+      <option value="casual">casual</option><option value="formal">formal</option>
+      <option value="genz">gen z</option>
+    </select></label>
+    <label>Editing <select id="editing">
+      <option value="light">light</option><option value="medium" selected>medium</option>
+      <option value="heavy">heavy</option>
+    </select></label>
+  </div>
+
+  <div class="card">
+    <h2>What just happened</h2>
+    <div class="steps">
+      <div class="step" id="s-listen"><span class="dot"></span>
+        <div><div class="name">1 · Listening</div><div class="val" id="v-listen">Mic → 16 kHz audio → sent to local server</div></div>
+        <span class="time" id="t-listen"></span></div>
+      <div class="step" id="s-asr"><span class="dot"></span>
+        <div><div class="name">2 · Speech → text (Whisper)</div><div class="val" id="v-asr">—</div></div>
+        <span class="time" id="t-asr"></span></div>
+      <div class="step" id="s-clean"><span class="dot"></span>
+        <div><div class="name">3 · Clean up (local AI)</div><div class="val" id="v-clean">—</div></div>
+        <span class="time" id="t-clean"></span></div>
+      <div class="step" id="s-insert"><span class="dot"></span>
+        <div><div class="name">4 · Typed into the text box</div><div class="val" id="v-insert">—</div></div>
+        <span class="time" id="t-insert"></span></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  const box = document.getElementById("box");
+  window.LocalDictationConfig = {
+    server: `ws://${location.hostname === "localhost" ? "localhost" : "127.0.0.1"}:${location.port || 8765}/v1/dictate`,
+    fallbackTarget: box,           // the mic button types here even when the box isn't focused
+    cleanup: true,
+    dictionary: [], style: "casual", editing: "medium",
+  };
+</script>
+<script src="/sdk.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const steps = ["listen", "asr", "clean", "insert"];
+  const set = (name, cls, val, time) => {
+    const el = $("s-" + name); el.className = "step" + (cls ? " " + cls : "");
+    if (val !== undefined) $("v-" + name).textContent = val;
+    if (time !== undefined) $("t-" + name).textContent = time;
+  };
+  const status = (t, err) => { $("status").textContent = t; $("status").className = err ? "err" : ""; };
+  let t0 = 0, tRelease = 0;
+
+  const syncOptions = () => {
+    LocalDictation.config.dictionary = $("dict").value.split(",").map((w) => w.trim()).filter(Boolean);
+    LocalDictation.config.style = $("style").value;
+    LocalDictation.config.editing = $("editing").value;
+  };
+  ["dict", "style", "editing"].forEach((id) => $(id).addEventListener("change", syncOptions));
+  syncOptions();
+
+  $("cleanup").addEventListener("change", (e) => { LocalDictation.config.cleanup = e.target.checked; });
+  $("mic").addEventListener("mousedown", (e) => e.preventDefault());   // keep the cursor in the textarea
+  $("mic").addEventListener("click", () => {
+    if (LocalDictation.isActive()) LocalDictation.stop(); else { box.focus(); LocalDictation.start(); }
+  });
+
+  window.addEventListener("localdictation", ({ detail: d }) => {
+    if (d.stage === "listening") {
+      t0 = performance.now();
+      steps.forEach((s) => set(s, "", s === "listen" ? undefined : "—", ""));
+      set("listen", "active"); status("Listening…"); $("mic").classList.add("rec");
+    } else if (d.stage === "partial") {
+      set("asr", "active", d.text || "…");
+    } else if (d.stage === "processing") {
+      tRelease = performance.now();
+      set("listen", "done", undefined, ((tRelease - t0) / 1000).toFixed(1) + " s spoken");
+      set("asr", "active"); status("Transcribing…"); $("mic").classList.remove("rec");
+    } else if (d.stage === "result") {
+      set("asr", "done", d.raw_text || "(no speech heard)", d.asr_ms + " ms");
+      if (d.cleanup_ms != null) set("clean", "done", d.text, d.cleanup_ms + " ms");
+      else set("clean", d.cleanup_error ? "error" : "", d.cleanup_error ? "Skipped: " + d.cleanup_error : "Off: raw text used", "");
+      set("insert", d.text ? "done" : "", d.text ? "“" + d.text + "”" : "Nothing to type",
+          Math.round(performance.now() - tRelease) + " ms after release");
+      status("Ready");
+    } else if (d.stage === "error") {
+      steps.forEach((s) => { if ($("s-" + s).classList.contains("active")) set(s, "error"); });
+      status(d.message, true); $("mic").classList.remove("rec");
+    } else if (d.stage === "idle") {
+      $("mic").classList.remove("rec");
+      if ($("status").textContent === "Listening…") status("Cancelled");
+    }
+  });
+</script>
+</body>
+</html>
