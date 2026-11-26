@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Local Dictation",
+  "version": "1.0.0",
+  "description": "Hold Ctrl+Shift+Space in any text field to dictate. Speech is processed on your own computer.",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "local-dictation.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "pcm16-worklet.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
